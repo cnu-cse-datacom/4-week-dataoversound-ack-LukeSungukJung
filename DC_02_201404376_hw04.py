@@ -15,7 +15,10 @@ from pyfiglet import figlet_format
 
 HANDSHAKE_START_HZ = 4096
 HANDSHAKE_END_HZ = 5120 + 1024
-
+MY_ID_NUMBER = "201404376"
+MY_ID_LIST = [3, 2, 3, 0, 3, 1, 3, 4, 3, 0, 3, 4, 3, 3, 3, 7, 3, 6]
+MY_ID_LEN = len(MY_ID_LIST)
+MY_INCLUDE = False
 START_HZ = 1024
 STEP_HZ = 256
 BITS = 4
@@ -113,7 +116,16 @@ def extract_packet(freqs):
     freqs = freqs[::2]
     bit_chunks = [int(round((f - START_HZ) / STEP_HZ)) for f in freqs]
     bit_chunks = [c for c in bit_chunks[1:] if 0 <= c < (2 ** BITS)]
-    return bytearray(decode_bitchunks(BITS, bit_chunks))
+    ID_INCLUDE = False
+    bit_chunks = bit_chunks[:len(bit_chunks)-8]
+    if len(bit_chunks)> MY_ID_LEN:
+        for index_ in range(0,len(bit_chunks)):
+            if bit_chunks[index_:index_+MY_ID_LEN] == MY_ID_LIST:
+                ID_INCLUDE = True
+                bit_chunks = bit_chunks[:index_]+bit_chunks[index_+MY_ID_LEN:]
+                break
+
+    return bytearray(decode_bitchunks(BITS, bit_chunks)),ID_INCLUDE
 
 def display(s):
     cprint(figlet_format(s.replace(' ', '   '), font='doom'), 'yellow')
@@ -141,14 +153,18 @@ def listen_linux(frame_rate=44100, interval=0.1):
         dom = dominant(frame_rate, chunk)
 
         if in_packet and match(dom, HANDSHAKE_END_HZ):
-            byte_stream = extract_packet(packet)
-            try:
-                byte_stream = RSCodec(FEC_BYTES).decode(byte_stream)
-                byte_stream = byte_stream.decode("utf-8")
-
+            byte_stream,pt = extract_packet(packet)
+            print(byte_stream)
+            #try:    
+                #print(byte_stream)
+            #byte_stream = RSCodec(FEC_BYTES).decode(byte_stream)
+                #print(byte_stream)
+            byte_stream = byte_stream.decode("utf-8")
+                #print(byte_stream)
+            if pt:
                 display(byte_stream)
-            except ReedSolomonError as e:
-                pass
+            #except ReedSolomonError as e:
+            #    pass
                 #print("{}: {}".format(e, byte_stream))
 
             packet = []
