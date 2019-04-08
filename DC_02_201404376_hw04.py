@@ -25,6 +25,39 @@ BITS = 4
 
 FEC_BYTES = 4
 
+import numpy
+import pyaudio
+
+ll_make_sound = []
+
+def convert_hz(asc_list):
+    asc_list = [aa*STEP_HZ+START_HZ for aa in asc_list]
+    return asc_list
+
+
+def make_sound(asc_list):
+    hz_list= convert_hz(asc_list)
+    hz_list.insert(0,HANDSHAKE_START_HZ)
+    hz_list.append(HANDSHAKE_END_HZ)
+    convert_sound(hz_list)
+
+def convert_sound(data_list):
+    p = pyaudio.PyAudio()
+    stream = p.open(format=pyaudio.paFloat32, channels=1, rate=44100, output=True)
+    for hz in data_list:
+        samples = np.sin((np.pi*hz*2*np.arange(44100))/44100).astype(np.float32)
+        samples = np.array(samples);
+        stream.write(samples)
+    stream.close()
+def test_pyaudio():
+    p = pyaudio.PyAudio()
+    stream =p.open(format=pyaudio.paFloat32,channels=1,rate=44100,output=True)
+
+
+
+
+
+
 def stereo_to_mono(input_file, output_file):
     inp = wave.open(input_file, 'r')
     params = list(inp.getparams())
@@ -115,6 +148,7 @@ def decode_file(input_file, speed):
 def extract_packet(freqs):
     freqs = freqs[::2]
     bit_chunks = [int(round((f - START_HZ) / STEP_HZ)) for f in freqs]
+    print(bit_chunks)
     bit_chunks = [c for c in bit_chunks[1:] if 0 <= c < (2 ** BITS)]
     ID_INCLUDE = False
     bit_chunks = bit_chunks[:len(bit_chunks)-8]
@@ -124,8 +158,8 @@ def extract_packet(freqs):
                 ID_INCLUDE = True
                 bit_chunks = bit_chunks[:index_]+bit_chunks[index_+MY_ID_LEN:]
                 break
-
-    return bytearray(decode_bitchunks(BITS, bit_chunks)),ID_INCLUDE
+    #print(bit_chunks)
+    return bytearray(decode_bitchunks(BITS, bit_chunks)),ID_INCLUDE,bit_chunks
 
 def display(s):
     cprint(figlet_format(s.replace(' ', '   '), font='doom'), 'yellow')
@@ -146,6 +180,7 @@ def listen_linux(frame_rate=44100, interval=0.1):
 
     while True:
         l, data = mic.read()
+        #print(data)
         if not l:
             continue
 
@@ -153,7 +188,7 @@ def listen_linux(frame_rate=44100, interval=0.1):
         dom = dominant(frame_rate, chunk)
 
         if in_packet and match(dom, HANDSHAKE_END_HZ):
-            byte_stream,pt = extract_packet(packet)
+            byte_stream,pt,selected_pk = extract_packet(packet)
             print(byte_stream)
             #try:    
                 #print(byte_stream)
@@ -163,6 +198,7 @@ def listen_linux(frame_rate=44100, interval=0.1):
                 #print(byte_stream)
             if pt:
                 display(byte_stream)
+                make_sound(selected_pk)
             #except ReedSolomonError as e:
             #    pass
                 #print("{}: {}".format(e, byte_stream))
@@ -176,6 +212,7 @@ def listen_linux(frame_rate=44100, interval=0.1):
 
 if __name__ == '__main__':
     colorama.init(strip=not sys.stdout.isatty())
-
+    p = pyaudio.PyAudio()
+    stream =p.open(format=pyaudio.paFloat32,channels=1,rate=44100,output=True)
     #decode_file(sys.argv[1], float(sys.argv[2]))
     listen_linux()
